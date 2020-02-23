@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 segdisplay = { path = "../segdisplay" }
-sysfs_gpio = "0.5"
+gpio-cdev = "0.2"

@@ -4,3 +4,6 @@ members = [
     "scanner",
     "segdisplay",
 ]
+
+[profile.release]
+lto = true
