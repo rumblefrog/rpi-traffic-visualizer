@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+// Do we need authentication?
+message Authenticate {
+    //  A general building location
+    string location = 1;
+    // Unique per device and we can associate location with it
+    string mac_address = 2;
+}
+
+message Payload {
+    // If we don't use auth
+    string location = 1;
+    string mac_address = 2;
+
+    repeated Client clients = 3; 
+}
+
+message Client {
+    string bssid = 1;
+    float64 strength = 2;
+    // Current search for associations
+    repeated string associations = 3;
+}
