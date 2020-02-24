@@ -115,12 +115,6 @@ impl ShiftRegister {
             // Write value to current cell
             self.ser.set_value(0x80 & (value << i))?;
 
-            print!("{:X} = {} ", value, 0x80 & (value << i));
-
-            if i == 8 {
-                println!();
-            }
-
             // Shift cell over
             self.srclk.set_value(1)?;
             self.srclk.set_value(0)?;
