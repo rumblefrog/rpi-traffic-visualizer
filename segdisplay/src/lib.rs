@@ -99,11 +99,15 @@ impl ShiftRegister {
 
     pub fn purge(&mut self) -> Result<(), Error> {
         for _i in 0..8 {
+            // Write value to current cell
             self.ser.set_value(1)?;
+
+            // Shift cell over
             self.srclk.set_value(1)?;
             self.srclk.set_value(0)?;
         }
 
+        // Dispatch cleared shift register
         self.rclk.set_value(1)?;
         self.rclk.set_value(0)?;
 
