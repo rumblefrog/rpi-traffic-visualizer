@@ -49,7 +49,7 @@ fn main() {
         loop {
             let x = a_seg.read().unwrap();
     
-            seg_hw.write_int(*x);
+            let _ = seg_hw.write_int(*x);
         }
     });
 
