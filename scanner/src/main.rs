@@ -1,18 +1,21 @@
 use std::sync::{Arc, RwLock};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::thread;
 use std::fs::File;
-use std::io::{Error, Read, Cursor};
+use std::io::{prelude::*, BufReader};
 use std::path::Path;
-
-use csv::{ReaderBuilder, Trim, Error as CSVError};
 
 use serde::Deserialize;
 
+use segdisplay::SegDisplay;
+
 use notify::{Watcher, RecommendedWatcher, RecursiveMode, Event, Result as NotifyResult};
 
+use chrono::prelude::*;
+use chrono::Duration;
+
 fn main() {
-    let seg_display = Arc::new(RwLock::new(0));
+    let seg_display = Arc::new(RwLock::new(0u32));
 
     println!("Killing processes");
 
@@ -31,20 +34,24 @@ fn main() {
     println!("Dumping");
 
     let mut airodump_handle = Command::new("airodump-ng")
-        .args(&["wlan1mon", "--output-format", "csv", "-w", "out.dump"])
+        .args(&["wlan1mon", "--output-format", "json", "-w", "out.dump"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .current_dir("airodump")
         .spawn()
         .expect("Unable to spawn airodump");
 
-    // let a_seg = seg_display.clone();
+    let mut seg_hw = SegDisplay::new().expect("Unable to create seg display");
 
-    // thread::spawn(move || {
-    //     loop {
-    //         let x = a_seg.read().unwrap();
+    let a_seg = seg_display.clone();
+
+    thread::spawn(move || {
+        loop {
+            let x = a_seg.read().unwrap();
     
-    //         println!("{}", x);
-    //     }
-    // });
+            seg_hw.write_int(*x);
+        }
+    });
 
     let b_seg = seg_display.clone();
 
@@ -56,11 +63,22 @@ fn main() {
 
                    match stations {
                        Some(s) => {
+                            // println!("{:?}", s);
+
+                            let z_device = s.into_iter().find(|x| x.mac.as_ref().unwrap() == "1C:36:BB:8F:35:A7");
+
                             let mut c = b_seg.write().unwrap();
 
-                            *c = s.len();
-        
-                            println!("{}", *c);
+                            if let Some(z_device_resolved) = z_device {
+                                // Power is between -100 and 0 afaik
+                                *c = (100 + z_device_resolved.power) as u32;
+                            } else {
+                                *c = 0;
+                            }
+
+                            // let mut c = b_seg.write().unwrap();
+
+                            // *c = s.len() as u32;
                        }
                        None => println!("Can't read stations"),
                    }
@@ -70,105 +88,89 @@ fn main() {
         }
     }).expect("Can't watch");
 
-    watcher.watch("./airodump", RecursiveMode::Recursive).expect("Can't start watcher");
+    watcher.watch("./airodump", RecursiveMode::NonRecursive).expect("Can't start watcher");
 
     airodump_handle.wait().expect("Unable to wait dump thread");
 }
 
-// #[derive(Debug, Deserialize, PartialEq, Eq)]
-// struct AP {
-//     #[serde(rename = "BSSID")]
-//     bssid: String,
-
-//     #[serde(rename = "First time seen")]
-//     first_time_seen: String,
-
-//     #[serde(rename = "Last time seen")]
-//     last_time_seen: String,
-
-//     channel: u64,
-
-//     speed: i64,
-
-//     privacy: String,
-
-//     cipher:  String,
-
-//     authentication: String,
-
-//     power: i64,
-
-//     #[serde(rename = "# beacons")]
-//     beacon_count: u64,
-
-//     #[serde(rename = "# IV")]
-//     iv: u64,
-
-//     #[serde(rename = "LAN IP")]
-//     lan_ip: String,
-
-//     #[serde(rename = "ID-length")]
-//     id_length: u64,
-
-//     essid: String,
-
-//     key: String,
-// }
-
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 struct Station {
-    #[serde(rename = "Station MAC")]
-    mac: String,
+    #[serde(rename = "StationMAC")]
+    mac: Option<String>,
 
-    #[serde(rename = "First time seen")]
+    #[serde(rename = "FirstTimeSeen")]
     first_time_seen: String,
 
-    #[serde(rename = "Last time seen")]
+    #[serde(rename = "LastTimeSeen")]
     last_time_seen: String,
 
     #[serde(rename = "Power")]
-    power: i64,
+    power: i8,
 
-    #[serde(rename = "# packets")]
-    packet_count: u64,
+    #[serde(rename = "#packets")]
+    packet_count: Option<u64>,
 
     #[serde(rename = "BSSID")]
     bssid: String,
 
-    #[serde(rename = "Probed ESSIDs")]
-    probed_essids: String,
+    #[serde(rename = "ESSID")]
+    essid: String,
+
+    #[serde(rename = "ProbedESSIDS")]
+    probed_essids: Option<String>,
+
+    #[serde(rename = "Manufacturer")]
+    manufacturer: String,
+
+    wlan_type: Option<String>,
+
+    timestamp: String,
 }
 
 fn parse_cap_file<T: AsRef<Path>>(path: T) -> Option<Vec<Station>> {
-    let file = File::open(path);
+    use serde_json::from_str;
 
-    if file.is_err() {
-        return None
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_e) => return None,
+    };
+
+    let reader = BufReader::new(file);
+
+    let mut stations: Vec<Station> = Vec::new();
+
+    for line in reader.lines() {
+        match line {
+            Ok(l) => {
+                match from_str(&l) {
+                    Ok(e) => {
+                        stations.push(e);
+                    }
+                    _ => (),
+                }
+            },
+            _ => (),
+        }
     }
 
-    let mut buffer = String::new();
+    Some(
+        stations
+            .into_iter()
+            .filter(|i| {
+                if i.mac.is_none() {
+                    return false
+                }
 
-    if file.unwrap().read_to_string(&mut buffer).is_err() {
-        return None
-    }
+                let l_seen = NaiveDateTime::parse_from_str(&i.last_time_seen, "%Y-%m-%d %H:%M:%S");
 
-    let offset = buffer.find("Station MAC");
+                if l_seen.is_err() {
+                    return false
+                }
 
-    if offset.is_none() {
-        return None
-    }
+                let x = Local::now().naive_local().signed_duration_since(l_seen.unwrap());
 
-    let reader = ReaderBuilder::new()
-        .trim(Trim::All)
-        .from_reader(Cursor::new(&buffer[offset.unwrap()..]));
-
-    let stations = reader
-        .into_deserialize()
-        .collect::<Result<Vec<Station>, CSVError>>();
-
-    if stations.is_err() {
-        return None
-    }
-
-    Some(stations.unwrap())
+                x < Duration::seconds(30)
+            })
+            .collect()
+    )
 }
