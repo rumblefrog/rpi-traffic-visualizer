@@ -53,8 +53,6 @@ fn main() {
         }
     });
 
-    let b_seg = seg_display.clone();
-
     let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res: NotifyResult<Event>| {
         match res {
            Ok(event) => {
@@ -67,7 +65,7 @@ fn main() {
 
                             let z_device = s.into_iter().find(|x| x.mac.as_ref().unwrap() == "1C:36:BB:8F:35:A7");
 
-                            let mut c = b_seg.write().unwrap();
+                            let mut c = seg_display.write().unwrap();
 
                             if let Some(z_device_resolved) = z_device {
                                 // Power is between -100 and 0 afaik
@@ -140,16 +138,10 @@ fn parse_cap_file<T: AsRef<Path>>(path: T) -> Option<Vec<Station>> {
     let mut stations: Vec<Station> = Vec::new();
 
     for line in reader.lines() {
-        match line {
-            Ok(l) => {
-                match from_str(&l) {
-                    Ok(e) => {
-                        stations.push(e);
-                    }
-                    _ => (),
-                }
-            },
-            _ => (),
+        if let Ok(l) = line {
+            if let Ok(e) = from_str(&l) {
+                stations.push(e);
+            }
         }
     }
 
