@@ -18,7 +18,7 @@ message Payload {
 
 message Client {
     string bssid = 1;
-    float64 strength = 2;
+    float strength = 2;
     // Current search for associations
     repeated string associations = 3;
 }

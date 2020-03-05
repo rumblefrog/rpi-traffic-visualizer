@@ -1,7 +1,8 @@
 [workspace]
 
 members = [
-    "scanner",
+    "poc",
+    "daemon",
     "segdisplay",
 ]
 
